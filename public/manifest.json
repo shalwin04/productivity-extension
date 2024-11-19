@@ -1,25 +1,16 @@
 {
-  "short_name": "React App",
-  "name": "Create React App Sample",
-  "icons": [
-    {
-      "src": "favicon.ico",
-      "sizes": "64x64 32x32 24x24 16x16",
-      "type": "image/x-icon"
-    },
-    {
-      "src": "logo192.png",
-      "type": "image/png",
-      "sizes": "192x192"
-    },
-    {
-      "src": "logo512.png",
-      "type": "image/png",
-      "sizes": "512x512"
-    }
+  "manifest_version": 3,
+  "name": "Productivity & Wellness Extension",
+  "version": "1.0.0",
+  "description": "A productivity and mental wellness extension with focus and chill modes, and a chatbot for guidance.",
+  "action" : {
+    "default_popup" : "index.html"
+  },
+  "permissions" : [
+    "scripting"
   ],
-  "start_url": ".",
-  "display": "standalone",
-  "theme_color": "#000000",
-  "background_color": "#ffffff"
+  "host_permissions" : [
+    "http://*/*",
+    "https://*/*"
+  ]
 }
