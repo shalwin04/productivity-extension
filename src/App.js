@@ -1,11 +1,12 @@
-import logo from "./logo.svg";
+// import logo from "./logo.svg";
 import "./App.css";
+import Home from "./components/Home";
 
 function App() {
   return (
     <div className="artboard phone-5">
-      <div className="flex flex-col items-center align-middle">
-        <img src={logo} className="App-logo" alt="logo" />
+      {/* <div className="flex flex-col items-center align-middle"> */}
+      {/* <img src={logo} className="App-logo" alt="logo" />
         <p>
           Edit <code>src/App.js</code> and save to reload.
         </p>
@@ -16,8 +17,9 @@ function App() {
           rel="noopener noreferrer"
         >
           Learn React
-        </a>
-      </div>
+        </a> */}
+      {/* </div> */}
+      <Home />
     </div>
   );
 }
