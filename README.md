@@ -1,5 +1,4 @@
 # **Productivity Chrome Extension**
-
 A productivity-focused Chrome extension with two modes: **Focus** and **Chill**. This extension helps users track their activities, measure productivity, and relax when needed. It also features a chatbot for productivity and mental health support.
 
 ---
