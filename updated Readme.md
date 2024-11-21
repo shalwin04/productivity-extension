@@ -60,5 +60,5 @@ npm run build
 
 - For questions or suggestions, feel free to reach out:
 
-- Email: shalwinsanju.25cs@licet.ac.in
-- GitHub: shalwin04
+- **Email**: [shalwinsanju.25cs@licet.ac.in]
+- **GitHub**: [shalwin04](https://github.com/shalwin04)
