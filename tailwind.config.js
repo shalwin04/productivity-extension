@@ -1,7 +1,9 @@
+/* eslint-disable import/no-anonymous-default-export */
 /** @type {import('tailwindcss').Config} */
 import daisyui from "daisyui";
-module.exports = {
-  content: ["./src/**/*.{html,js, jsx, ts, tsx}"],
+
+export default {
+  content: ["./src/**/*.{html,js,jsx,ts,tsx}"],
   theme: {
     extend: {
       fontFamily: {
