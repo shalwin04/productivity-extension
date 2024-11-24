@@ -21,6 +21,10 @@ export default {
       colors: {
         "citrine-white": "#FCF8D6",
         espresso: "#5E2217",
+        background: "#DED4D4",
+        name: " #415111",
+        "vintage-teal": "#699699",
+        title: "#7D681E",
       },
     },
   },
