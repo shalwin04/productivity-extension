@@ -4,7 +4,7 @@ import Home from "./components/Home";
 
 function App() {
   return (
-    <div className="relative artboard phone-2 bg-background">
+    <div className="relative artboard phone-2 bg-citrine-white">
       {/* <div className="h-screen flex flex-col items-center">
         <p className="text-3xl mt-4 text-center align-text-top font-lora">
           Productivity

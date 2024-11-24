@@ -6,8 +6,8 @@ const Home = () => {
   const [mode, setmode] = useState("Productivity");
 
   const [chatMessages, setChatMessages] = useState([
-    { message: "It's over Anakin, I have the high ground.", align: "start" },
-    { message: "You underestimate my power!", align: "end" },
+    { message: "It's over Anakin, I have the high ground.", align: "end" },
+    { message: "You underestimate my power!", align: "start" },
   ]);
 
   const handleToggle = (e) => {
@@ -19,17 +19,14 @@ const Home = () => {
     { value: 50, label: "Reading" },
     { value: 75, label: "Coding" },
     { value: 40, label: "Exercise" },
-    {value: 20, label: "Youtube" },
-    { value: 50, label: "Reading" },
-    { value: 75, label: "Coding" },
-    { value: 40, label: "Exercise" },
-    { value: 75, label: "Coding" },
-    { value: 40, label: "Exercise" },
   ];
 
   const handleSendMessage = (e) => {
     if (e.key === "Enter" && e.target.value.trim() !== "") {
-      setChatMessages([...chatMessages, { message: e.target.value, align: "end" }]);
+      setChatMessages([
+        ...chatMessages,
+        { message: e.target.value, align: "start" },
+      ]);
       e.target.value = "";
     }
   };
@@ -68,19 +65,19 @@ const Home = () => {
         ></progress>
       </div>
       <RadialBar data={progressData} />
-      <div className="flex flex-col overflow-y-auto space-y-4 p-4 bg-gray-100 h-1/2">
-        {chatMessages.map((chat, index) => (
-          <ChatBubble key={index} message={chat.message} align={chat.align} />
-        ))}
-      </div>
-
-      {/* Chat Input */}
-      <div className="flex-none bg-citrine-white">
-        <input
-          className="border border-gray-300 bg-citrine-white rounded-full px-4 py-2 text-black w-full focus:outline-none focus:ring-2 focus:ring-blue-500"
-          placeholder="Ask me something..."
-          onKeyDown={handleSendMessage}
-        />
+      <div className="relative bottom-0 left-0 w-full bg-citrine-white flex flex-col h-1/2">
+        <div className="flex-grow overflow-y-auto space-y-4 p-4 bg-citrine-white">
+          {chatMessages.map((chat, index) => (
+            <ChatBubble key={index} message={chat.message} align={chat.align} />
+          ))}
+        </div>
+        <div className="p-4">
+          <input
+            className="border border-gray-300 bg-citrine-white rounded-full px-4 py-2 text-black w-full focus:outline-none focus:ring-2 focus:ring-blue-500"
+            placeholder="Ask me something..."
+            onKeyDown={handleSendMessage}
+          />
+        </div>
       </div>
     </div>
   );
