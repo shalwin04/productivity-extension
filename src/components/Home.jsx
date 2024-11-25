@@ -33,11 +33,11 @@ const Home = () => {
 
   return (
     <div className="relative h-screen flex flex-col items-center">
-      <p className="text-3xl mt-4 text-title text-center align-text-top font-italic font-lora">
+      <p className="text-3xl mt-4 text-title text-center align-text-top font-semibold font-lora">
         productivity
       </p>
-      <p className="mt-4 text-espresso">
-        your personalized productivity & wellness bot
+      <p className="mt-4 text-orange-300">
+        c'mon kid this is your dream.
       </p>
       <div className="flex flex-none items-center mt-5 space-x-4">
         <div className="grid w-32">
