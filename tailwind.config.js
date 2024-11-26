@@ -8,7 +8,8 @@ export default {
     extend: {
       fontFamily: {
         lora: ["Lora", "serif"],
-        poppins : ["Poppins","sans-serif"]
+        poppins : ["Poppins","sans-serif"],
+        playfair : ["Playfair Display","serif"]
       },
       fontWeight: {
         400: 400,
