@@ -12,12 +12,7 @@ const Home = () => {
   const [isLoading, setIsLoading] = useState(false);
   const chatEndRef = useRef(null);
 
-  const progressData = [
-    { value: 20, label: "Youtube" },
-    { value: 50, label: "Reading" },
-    { value: 75, label: "Coding" },
-    { value: 40, label: "Exercise" },
-  ];
+  const [progressData, setProgressData] = useState([]);
 
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
@@ -33,7 +28,7 @@ const Home = () => {
     try {
       // Check if we're in a Chrome extension environment
       if (typeof chrome !== "undefined" && chrome.runtime) {
-        chrome.runtime.sendMessage({ action: "getActiveTabs" }, (response) => {
+        chrome.runtime.sendMessage({ action: "getTabNames" }, (response) => {
           if (chrome.runtime.lastError) {
             console.error("Chrome runtime error:", chrome.runtime.lastError);
             setChatMessages((prev) => [
@@ -45,8 +40,17 @@ const Home = () => {
               },
             ]);
           } else {
-            console.log("Active Tabs:", response?.activeTabs);
-            // Process the tabs data as needed
+            const tabNames = response?.tabNames || [];
+            console.log("Active Tab Names:", tabNames);
+
+            // Map the tab names to progress data
+            const updatedProgressData = tabNames.map((name, index) => ({
+              value: Math.floor(Math.random() * 100), // Random value between 0-100
+              label: name,
+            }));
+
+            // Update the progress data
+            setProgressData(updatedProgressData);
           }
         });
       }

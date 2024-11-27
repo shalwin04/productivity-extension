@@ -1,15 +1,49 @@
 /*global chrome*/
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  if (message.action === "getActiveTabs") {
-    // Query all active tabs in all windows
-    chrome.tabs.query({ active: true }, (tabs) => {
-      // Send back the list of active tabs
-      sendResponse({ activeTabs: tabs });
+  if (message.action === "getTabNames") {
+    // Query all open tabs
+    chrome.tabs.query({}, (tabs) => {
+      // Extract names of the tabs from their URLs
+      const tabNames = tabs.map((tab) => {
+        if (tab.url) {
+          try {
+            // Create a URL object to extract hostname
+            const hostname = new URL(tab.url).hostname;
+            // Remove subdomains (if needed) and return the base domain
+            const domainParts = hostname.split(".");
+            const name =
+              domainParts.length > 2
+                ? domainParts.slice(-2).join(".") // e.g., "google.com"
+                : hostname; // e.g., "localhost"
+            return name;
+          } catch (error) {
+            console.error("Error parsing URL:", tab.url, error);
+            return "Unknown Site";
+          }
+        } else {
+          return "Unknown Site";
+        }
+      });
+
+      // Send back the list of names
+      sendResponse({ tabNames });
     });
     // Required to use sendResponse asynchronously
     return true;
   }
 });
+
+// chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+//   if (message.action === "getActiveTabs") {
+//     // Query all active tabs in all windows
+//     chrome.tabs.query({ active: true }, (tabs) => {
+//       // Send back the list of active tabs
+//       sendResponse({ activeTabs: tabs });
+//     });
+//     // Required to use sendResponse asynchronously
+//     return true;
+//   }
+// });
 
 // // background.js
 // let tabData = {};
