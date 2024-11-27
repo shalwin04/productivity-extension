@@ -3,17 +3,13 @@
   "name": "Productivity & Wellness Extension",
   "version": "1.0.0",
   "description": "A productivity and mental wellness extension with focus and chill modes, and a chatbot for guidance.",
-  "action" : {
-    "default_popup" : "index.html"
+  "action": {
+    "default_popup": "index.html"
   },
-  "background" : {
-    "service_worker": "background.js"
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
   },
-  "permissions" : [
-    "scripting", "tabs", "activeTab"
-  ],
-  "host_permissions" : [
-    "http://*/*",
-    "https://*/*"
-  ]
+  "permissions": ["tabs"],
+  "host_permissions": ["http://*/*", "https://*/*"]
 }
