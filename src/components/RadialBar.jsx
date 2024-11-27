@@ -10,7 +10,7 @@ const RadialBar = ({ data }) => {
             style={{ "--value": item.value }}
             role="progressbar"
           >
-            {item.value}%
+            {item.value}min
           </div>
           <span className="text-xs text-vintage-teal font-poppins mt-2">
             {item.label}

@@ -16,6 +16,7 @@ const Home = () => {
 
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
+    fetchActiveTabs();
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [chatMessages]);
 
@@ -28,25 +29,25 @@ const Home = () => {
     try {
       // Check if we're in a Chrome extension environment
       if (typeof chrome !== "undefined" && chrome.runtime) {
-        chrome.runtime.sendMessage({ action: "getTabNames" }, (response) => {
+        chrome.runtime.sendMessage({ action: "getTabTimes" }, (response) => {
           if (chrome.runtime.lastError) {
             console.error("Chrome runtime error:", chrome.runtime.lastError);
             setChatMessages((prev) => [
               ...prev,
               {
                 message:
-                  "Sorry, I couldn't fetch the active tabs. Please try again.",
+                  "Sorry, I couldn't fetch the tab times. Please try again.",
                 align: "end",
               },
             ]);
           } else {
-            const tabNames = response?.tabNames || [];
-            console.log("Active Tab Names:", tabNames);
+            const tabTimes = response?.tabTimes || [];
+            console.log("Tab Times:", tabTimes);
 
-            // Map the tab names to progress data
-            const updatedProgressData = tabNames.map((name, index) => ({
-              value: Math.floor(Math.random() * 100), // Random value between 0-100
-              label: name,
+            // Map the tab times to progress data
+            const updatedProgressData = tabTimes.map((tab) => ({
+              value: Math.min(tab.timeSpent * 10, 100), // Scale minutes to fit 0-100 range
+              label: tab.name,
             }));
 
             // Update the progress data
@@ -78,7 +79,6 @@ const Home = () => {
       e.target.value = "";
 
       // Fetch tabs data
-      fetchActiveTabs();
 
       // Add assistant response (you can modify this based on your needs)
       setTimeout(() => {
