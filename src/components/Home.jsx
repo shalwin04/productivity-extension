@@ -6,19 +6,35 @@ import ChatBubble from "./ChatBubble";
 const Home = () => {
   const [mode, setMode] = useState("Productivity");
   const [chatMessages, setChatMessages] = useState([
-    { message: "It's over Anakin, I have the high ground.", align: "end" },
-    { message: "You underestimate my power!", align: "start" },
+    { message: "Hi! I'll help you track your browsing time.", align: "end" },
   ]);
   const [isLoading, setIsLoading] = useState(false);
+  const [radialData, setRadialData] = useState([]);
   const chatEndRef = useRef(null);
 
-  const [progressData, setProgressData] = useState([]);
-
-  // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
+    // Establish connection with service worker
+    const port = chrome.runtime.connect({ name: "popup" });
     fetchActiveTabs();
-    chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [chatMessages]);
+    // Listen for updates from service worker
+    port.onMessage.addListener((message) => {
+      if (message.action === "activityUpdate") {
+        const formattedData = message.data.map((tab) => ({
+          value: parseFloat(tab.totalActiveTime),
+          label: tab.name,
+        }));
+        setRadialData(formattedData);
+      }
+    });
+
+    // Request initial data
+    port.postMessage({ action: "getTabActivity" });
+
+    // Clean up connection when component unmounts
+    return () => port.disconnect();
+  }, []);
+
+  // Rest of the component remains the same
 
   const handleToggle = (e) => {
     setMode(e.target.checked ? "Relax" : "Productivity");
@@ -27,9 +43,8 @@ const Home = () => {
   const fetchActiveTabs = async () => {
     setIsLoading(true);
     try {
-      // Check if we're in a Chrome extension environment
       if (typeof chrome !== "undefined" && chrome.runtime) {
-        chrome.runtime.sendMessage({ action: "getTabTimes" }, (response) => {
+        chrome.runtime.sendMessage({ action: "getTabActivity" }, (response) => {
           if (chrome.runtime.lastError) {
             console.error("Chrome runtime error:", chrome.runtime.lastError);
             setChatMessages((prev) => [
@@ -41,17 +56,13 @@ const Home = () => {
               },
             ]);
           } else {
-            const tabTimes = response?.tabTimes || [];
-            console.log("Tab Times:", tabTimes);
-
-            // Map the tab times to progress data
-            const updatedProgressData = tabTimes.map((tab) => ({
-              value: Math.min(tab.timeSpent * 10, 100), // Scale minutes to fit 0-100 range
+            const activityData = response?.activityData || [];
+            // Convert the activity data to the format expected by RadialBar
+            const formattedData = activityData.map((tab) => ({
+              value: parseFloat(tab.totalActiveTime), // Convert string to number if needed
               label: tab.name,
             }));
-
-            // Update the progress data
-            setProgressData(updatedProgressData);
+            setRadialData(formattedData);
           }
         });
       }
@@ -65,27 +76,17 @@ const Home = () => {
   const handleSendMessage = (e) => {
     if (e.key === "Enter" && e.target.value.trim() !== "") {
       const userMessage = e.target.value.trim();
-
-      // Add user message
       setChatMessages((prev) => [
         ...prev,
-        {
-          message: userMessage,
-          align: "start",
-        },
+        { message: userMessage, align: "start" },
       ]);
-
-      // Clear input
       e.target.value = "";
 
-      // Fetch tabs data
-
-      // Add assistant response (you can modify this based on your needs)
       setTimeout(() => {
         setChatMessages((prev) => [
           ...prev,
           {
-            message: `You're in ${mode} mode. How can I help you?`,
+            message: `You're in ${mode} mode. Here's your current browsing activity.`,
             align: "end",
           },
         ]);
@@ -98,49 +99,29 @@ const Home = () => {
       <p className="text-4xl mt-4 tracking-wide text-black text-center align-text-top italic font-playfair">
         kiddo
       </p>
-      <p className="text-xs mt-4 text-purple-700">
-        c'mon kid this is your dream.
-      </p>
+      <p className="text-xs mt-4 text-purple-700">tracking your time</p>
 
       {/* Mode Toggle */}
       <div className="flex flex-none items-center mt-5 space-x-4">
-        <div className="grid w-32">
-          <span className="text-sm text-vintage-teal font-poppins">{mode}</span>
-        </div>
-        <div className="grid">
-          <input
-            type="checkbox"
-            className="toggle toggle-md"
-            onChange={handleToggle}
-            checked={mode === "Relax"}
-          />
-        </div>
+        <span className="text-sm text-vintage-teal font-poppins">{mode}</span>
+        <input
+          type="checkbox"
+          className="toggle toggle-md"
+          onChange={handleToggle}
+          checked={mode === "Relax"}
+        />
       </div>
 
-      {/* Progress Bar */}
-      <div className="flex flex-none items-center mt-10 space-x-4">
-        <div className="grid w-32">
-          <span className="text-sm text-vintage-teal font-poppins">
-            Time Spent
-          </span>
-        </div>
-        <progress
-          className="grid progress progress-info w-32"
-          value={0}
-          max="100"
-        ></progress>
-      </div>
-
-      {/* Radial Bar Chart */}
-      <RadialBar data={progressData} />
+      {/* Radial Progress Bars */}
+      <RadialBar data={radialData} />
 
       {/* Chat Interface */}
-      <div className="relative bottom-0 left-0 w-full bg-white flex flex-col h-1/2">
+      <div className="relative bottom-0 left-0 w-full bg-white flex flex-col h-1/3 mt-auto">
         <div className="flex-grow overflow-y-auto space-y-4 p-4 bg-white">
           {chatMessages.map((chat, index) => (
             <ChatBubble key={index} message={chat.message} align={chat.align} />
           ))}
-          <div ref={chatEndRef} /> {/* Scroll anchor */}
+          <div ref={chatEndRef} />
         </div>
 
         {/* Chat Input */}

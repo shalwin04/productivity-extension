@@ -1,86 +1,206 @@
 /*global chrome*/
 
-let activeTabId = null; // ID of the currently active tab
-let lastActiveTime = Date.now(); // Timestamp of the last tab activation
-let tabTimeData = {}; // Object to store time spent on each tab
+let activeTabId = null;
+let lastActiveTime = Date.now();
+let tabActivityData = {}; // Store activity data for each tab
+let activeThreshold = 5000; // 5 seconds threshold to consider a tab "active"
+let inactivityTimer = null;
+const UPDATE_INTERVAL = 30000; // 30 seconds in milliseconds
 
-// Function to update time spent on the currently active tab
-function updateTimeSpent() {
-  if (activeTabId !== null) {
-    const currentTime = Date.now();
-    const timeSpent = currentTime - lastActiveTime;
+// Initialize periodic updates
+setInterval(() => {
+  updateAllTabs();
+}, UPDATE_INTERVAL);
 
-    // Convert to minutes and update time data
-    tabTimeData[activeTabId] =
-      (tabTimeData[activeTabId] || 0) + timeSpent / 60000;
+// Function to update all tabs
+function updateAllTabs() {
+  chrome.tabs.query({}, (tabs) => {
+    tabs.forEach((tab) => {
+      if (tabActivityData[tab.id] && tabActivityData[tab.id].isActive) {
+        const currentTime = Date.now();
+        const tabData = tabActivityData[tab.id];
 
-    lastActiveTime = currentTime;
+        // Update total active time for active tabs
+        if (tabData.lastActiveStart) {
+          tabData.totalActiveTime += currentTime - tabData.lastActiveStart;
+          tabData.lastActiveStart = currentTime;
+        }
+      }
+    });
+
+    // Only try to broadcast if there are any connections
+    chrome.runtime.sendMessage(
+      {
+        action: "activityUpdate",
+        data: getFormattedActivityData(tabs),
+      },
+      // Add response callback to handle potential errors
+      () => {
+        if (chrome.runtime.lastError) {
+          // Ignore the error - this just means no listeners are connected
+          console.log("No receivers for activity update");
+        }
+      }
+    );
+  });
+}
+
+// Helper function to format activity data
+function getFormattedActivityData(tabs) {
+  return tabs.map((tab) => {
+    const data = tabActivityData[tab.id] || {
+      totalActiveTime: 0,
+      activityCount: 0,
+      isActive: false,
+    };
+
+    let currentActiveTime = 0;
+    if (data.isActive && data.lastActiveStart) {
+      currentActiveTime = Date.now() - data.lastActiveStart;
+    }
+
+    try {
+      const hostname = tab.url ? new URL(tab.url).hostname : "unknown";
+      const domainName = hostname.split(".").slice(-2).join(".");
+
+      return {
+        name: domainName,
+        url: tab.url,
+        totalActiveTime: (
+          (data.totalActiveTime + currentActiveTime) /
+          60000
+        ).toFixed(2),
+        activityCount: data.activityCount,
+        isCurrentlyActive: data.isActive,
+        lastInteraction: data.lastInteraction
+          ? new Date(data.lastInteraction).toLocaleString()
+          : "Never",
+      };
+    } catch (error) {
+      console.error("Error processing tab data:", error);
+      return {
+        name: "Unknown Site",
+        url: tab.url,
+        totalActiveTime: "0.00",
+        activityCount: 0,
+        isCurrentlyActive: false,
+        lastInteraction: "Never",
+      };
+    }
+  });
+}
+
+// Initialize or reset a tab's activity data
+function initTabActivity(tabId) {
+  if (!tabActivityData[tabId]) {
+    tabActivityData[tabId] = {
+      totalActiveTime: 0,
+      lastActiveStart: null,
+      isActive: false,
+      activityCount: 0,
+      url: null,
+      lastInteraction: null,
+    };
   }
+}
+
+// Update activity status for a tab
+function updateTabActivity(tabId, isActive = true) {
+  if (!tabActivityData[tabId]) {
+    initTabActivity(tabId);
+  }
+
+  const currentTime = Date.now();
+  const tabData = tabActivityData[tabId];
+
+  if (isActive && !tabData.isActive) {
+    tabData.isActive = true;
+    tabData.lastActiveStart = currentTime;
+    tabData.activityCount++;
+    tabData.lastInteraction = currentTime;
+  } else if (!isActive && tabData.isActive) {
+    tabData.isActive = false;
+    if (tabData.lastActiveStart) {
+      tabData.totalActiveTime += currentTime - tabData.lastActiveStart;
+    }
+    tabData.lastActiveStart = null;
+  }
+}
+
+// Handle user interactions
+function handleUserInteraction(tabId) {
+  if (inactivityTimer) {
+    clearTimeout(inactivityTimer);
+  }
+
+  updateTabActivity(tabId, true);
+
+  inactivityTimer = setTimeout(() => {
+    updateTabActivity(tabId, false);
+  }, activeThreshold);
 }
 
 // Listen for tab activations
 chrome.tabs.onActivated.addListener((activeInfo) => {
-  updateTimeSpent(); // Update time for the previously active tab
-  activeTabId = activeInfo.tabId; // Set the new active tab
-  lastActiveTime = Date.now(); // Reset the activation time
+  const tabId = activeInfo.tabId;
+  activeTabId = tabId;
+  handleUserInteraction(tabId);
+
+  chrome.tabs.get(tabId, (tab) => {
+    if (tab && tab.url) {
+      if (!tabActivityData[tabId]) {
+        initTabActivity(tabId);
+      }
+      tabActivityData[tabId].url = tab.url;
+    }
+  });
 });
 
-// Listen for tab updates (e.g., URL change)
+// Listen for tab updates
 chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
   if (tab.active && changeInfo.status === "complete") {
-    updateTimeSpent(); // Update time for the previous state
-    activeTabId = tabId; // Update the active tab ID
-    lastActiveTime = Date.now(); // Reset activation time
+    if (tabActivityData[tabId]) {
+      tabActivityData[tabId].url = tab.url;
+    }
+    handleUserInteraction(tabId);
   }
 });
 
-// Track when the browser window loses or regains focus
+// Track window focus changes
 chrome.windows.onFocusChanged.addListener((windowId) => {
-  updateTimeSpent(); // Update time spent on the current tab
-
-  // If focus is on a valid window, update active tab
-  if (windowId !== chrome.windows.WINDOW_ID_NONE) {
+  if (windowId === chrome.windows.WINDOW_ID_NONE) {
+    if (activeTabId) {
+      updateTabActivity(activeTabId, false);
+    }
+  } else {
     chrome.tabs.query({ active: true, windowId }, (tabs) => {
       if (tabs[0]) {
         activeTabId = tabs[0].id;
-        lastActiveTime = Date.now();
+        handleUserInteraction(activeTabId);
       }
     });
-  } else {
-    activeTabId = null; // No active tab
   }
 });
 
-// Listener for messages
+// Listen for messages
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  if (message.action === "getTabTimes") {
-    updateTimeSpent(); // Ensure the latest time is updated
+  if (message.action === "getTabActivity") {
+    // Get current tabs and send response
     chrome.tabs.query({}, (tabs) => {
-      const tabTimes = tabs.map((tab) => {
-        if (tab.url) {
-          try {
-            // Extract hostname from URL
-            const hostname = new URL(tab.url).hostname;
-            const domainParts = hostname.split(".");
-            const name =
-              domainParts.length > 2
-                ? domainParts.slice(-2).join(".")
-                : hostname;
-            const timeSpent = tabTimeData[tab.id] || 0; // Time in minutes
-            return { name, timeSpent: timeSpent.toFixed(2) }; // Return 2 decimal places
-          } catch (error) {
-            console.error("Error parsing URL:", tab.url, error);
-            return { name: "Unknown Site", timeSpent: 0 };
-          }
-        } else {
-          return { name: "Unknown Site", timeSpent: 0 };
-        }
-      });
-
-      sendResponse({ tabTimes });
+      const activityData = getFormattedActivityData(tabs);
+      sendResponse({ activityData });
     });
-    return true; // Required to send response asynchronously
+    return true; // Required for asynchronous response
   }
+});
+
+// Initialize connection tracking
+let connections = 0;
+chrome.runtime.onConnect.addListener((port) => {
+  connections++;
+  port.onDisconnect.addListener(() => {
+    connections--;
+  });
 });
 
 // chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
