@@ -99,7 +99,9 @@ const Home = () => {
       <p className="text-4xl mt-4 tracking-wide text-black text-center align-text-top italic font-playfair">
         kiddo
       </p>
-      <p className="text-xs mt-4 text-purple-700">tracking your time</p>
+      <p className="text-xs mt-4 text-purple-700">
+        c'mon kid, this is your dream!
+      </p>
 
       {/* Mode Toggle */}
       <div className="flex flex-none items-center mt-5 space-x-4">
