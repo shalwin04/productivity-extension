@@ -5,7 +5,7 @@ let lastActiveTime = Date.now();
 let tabActivityData = {}; // Store activity data for each tab
 let activeThreshold = 5000; // 5 seconds threshold to consider a tab "active"
 let inactivityTimer = null;
-const UPDATE_INTERVAL = 30000; // 30 seconds in milliseconds
+const UPDATE_INTERVAL = 20000; // 20 seconds in milliseconds
 
 // Initialize periodic updates
 setInterval(() => {
@@ -300,9 +300,6 @@ chrome.runtime.onConnect.addListener((port) => {
 //     lastActiveTime[tabId] = Date.now();
 //   }
 // });
-
-// // Set up periodic time updates
-// setInterval(updateTimeSpent, 1000); // Update every second
 
 // // Listen for messages from popup
 // chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
