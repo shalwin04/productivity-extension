@@ -1,315 +1,155 @@
 /*global chrome*/
 
-let activeTabId = null;
-let lastActiveTime = Date.now();
-let tabActivityData = {}; // Store activity data for each tab
-let activeThreshold = 5000; // 5 seconds threshold to consider a tab "active"
-let inactivityTimer = null;
-const UPDATE_INTERVAL = 20000; // 20 seconds in milliseconds
+// Store data for all tabs
+let tabData = {};
+const UPDATE_INTERVAL = 1000; // Update every second
 
-// Initialize periodic updates
-setInterval(() => {
-  updateAllTabs();
-}, UPDATE_INTERVAL);
+// Initialize tab data structure
+function initializeTabData(tabId, url) {
+  if (!tabData[tabId]) {
+    tabData[tabId] = {
+      url: url,
+      startTime: Date.now(),
+      totalTime: 0,
+      isOpen: true,
+      hostname: getHostname(url),
+    };
+  }
+}
 
-// Function to update all tabs
+// Get hostname from URL
+function getHostname(url) {
+  try {
+    const urlObj = new URL(url);
+    return urlObj.hostname;
+  } catch {
+    return "unknown";
+  }
+}
+
+// Update timing for all open tabs
 function updateAllTabs() {
+  const currentTime = Date.now();
+
+  // Update time for all open tabs
+  Object.keys(tabData).forEach((tabId) => {
+    if (tabData[tabId].isOpen) {
+      const timeElapsed = currentTime - tabData[tabId].startTime;
+      tabData[tabId].totalTime += timeElapsed;
+      tabData[tabId].startTime = currentTime;
+    }
+  });
+
+  // Broadcast updated data
+  broadcastTabData();
+}
+
+// Format tab data for display
+function getFormattedTabData() {
+  return Object.entries(tabData).map(([tabId, data]) => ({
+    tabId: tabId,
+    url: data.url,
+    hostname: data.hostname,
+    totalTime: (data.totalTime / 1000).toFixed(2), // Convert to seconds
+    isOpen: data.isOpen,
+  }));
+}
+
+// Broadcast tab data to any listening components
+function broadcastTabData() {
+  chrome.runtime.sendMessage(
+    {
+      action: "tabsUpdate",
+      data: getFormattedTabData(),
+    },
+    () => {
+      if (chrome.runtime.lastError) {
+        console.log("No receivers connected");
+      }
+    }
+  );
+}
+
+// Start periodic updates
+setInterval(updateAllTabs, UPDATE_INTERVAL);
+
+// Track new tabs
+chrome.tabs.onCreated.addListener((tab) => {
+  initializeTabData(tab.id, tab.url);
+});
+
+// Track tab updates
+chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+  if (changeInfo.status === "complete" && tab.url) {
+    if (!tabData[tabId]) {
+      initializeTabData(tabId, tab.url);
+    } else {
+      tabData[tabId].url = tab.url;
+      tabData[tabId].hostname = getHostname(tab.url);
+    }
+  }
+});
+
+// Track tab closures
+chrome.tabs.onRemoved.addListener((tabId) => {
+  if (tabData[tabId]) {
+    tabData[tabId].isOpen = false;
+    // Keep the data for history but mark as closed
+  }
+});
+
+// Handle requests for tab data
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message.action === "getTabData") {
+    // Get all tabs to ensure our data is current
+    chrome.tabs.query({}, (tabs) => {
+      // Update our records for any tabs we might have missed
+      tabs.forEach((tab) => {
+        if (!tabData[tab.id]) {
+          initializeTabData(tab.id, tab.url);
+        }
+      });
+
+      sendResponse({
+        tabData: getFormattedTabData(),
+      });
+    });
+    return true; // Required for async response
+  }
+});
+
+// Handle browser startup
+chrome.runtime.onStartup.addListener(() => {
+  // Clear old data and initialize for current tabs
+  tabData = {};
   chrome.tabs.query({}, (tabs) => {
     tabs.forEach((tab) => {
-      if (tabActivityData[tab.id] && tabActivityData[tab.id].isActive) {
-        const currentTime = Date.now();
-        const tabData = tabActivityData[tab.id];
-
-        // Update total active time for active tabs
-        if (tabData.lastActiveStart) {
-          tabData.totalActiveTime += currentTime - tabData.lastActiveStart;
-          tabData.lastActiveStart = currentTime;
-        }
-      }
+      initializeTabData(tab.id, tab.url);
     });
-
-    // Only try to broadcast if there are any connections
-    chrome.runtime.sendMessage(
-      {
-        action: "activityUpdate",
-        data: getFormattedActivityData(tabs),
-      },
-      // Add response callback to handle potential errors
-      () => {
-        if (chrome.runtime.lastError) {
-          // Ignore the error - this just means no listeners are connected
-          console.log("No receivers for activity update");
-        }
-      }
-    );
-  });
-}
-
-// Helper function to format activity data
-function getFormattedActivityData(tabs) {
-  return tabs.map((tab) => {
-    const data = tabActivityData[tab.id] || {
-      totalActiveTime: 0,
-      activityCount: 0,
-      isActive: false,
-    };
-
-    let currentActiveTime = 0;
-    if (data.isActive && data.lastActiveStart) {
-      currentActiveTime = Date.now() - data.lastActiveStart;
-    }
-
-    try {
-      const hostname = tab.url ? new URL(tab.url).hostname : "unknown";
-      const domainName = hostname.split(".").slice(-2).join(".");
-
-      return {
-        name: domainName,
-        url: tab.url,
-        totalActiveTime: (
-          (data.totalActiveTime + currentActiveTime) /
-          60000
-        ).toFixed(2),
-        activityCount: data.activityCount,
-        isCurrentlyActive: data.isActive,
-        lastInteraction: data.lastInteraction
-          ? new Date(data.lastInteraction).toLocaleString()
-          : "Never",
-      };
-    } catch (error) {
-      console.error("Error processing tab data:", error);
-      return {
-        name: "Unknown Site",
-        url: tab.url,
-        totalActiveTime: "0.00",
-        activityCount: 0,
-        isCurrentlyActive: false,
-        lastInteraction: "Never",
-      };
-    }
-  });
-}
-
-// Initialize or reset a tab's activity data
-function initTabActivity(tabId) {
-  if (!tabActivityData[tabId]) {
-    tabActivityData[tabId] = {
-      totalActiveTime: 0,
-      lastActiveStart: null,
-      isActive: false,
-      activityCount: 0,
-      url: null,
-      lastInteraction: null,
-    };
-  }
-}
-
-// Update activity status for a tab
-function updateTabActivity(tabId, isActive = true) {
-  if (!tabActivityData[tabId]) {
-    initTabActivity(tabId);
-  }
-
-  const currentTime = Date.now();
-  const tabData = tabActivityData[tabId];
-
-  if (isActive && !tabData.isActive) {
-    tabData.isActive = true;
-    tabData.lastActiveStart = currentTime;
-    tabData.activityCount++;
-    tabData.lastInteraction = currentTime;
-  } else if (!isActive && tabData.isActive) {
-    tabData.isActive = false;
-    if (tabData.lastActiveStart) {
-      tabData.totalActiveTime += currentTime - tabData.lastActiveStart;
-    }
-    tabData.lastActiveStart = null;
-  }
-}
-
-// Handle user interactions
-function handleUserInteraction(tabId) {
-  if (inactivityTimer) {
-    clearTimeout(inactivityTimer);
-  }
-
-  updateTabActivity(tabId, true);
-
-  inactivityTimer = setTimeout(() => {
-    updateTabActivity(tabId, false);
-  }, activeThreshold);
-}
-
-// Listen for tab activations
-chrome.tabs.onActivated.addListener((activeInfo) => {
-  const tabId = activeInfo.tabId;
-  activeTabId = tabId;
-  handleUserInteraction(tabId);
-
-  chrome.tabs.get(tabId, (tab) => {
-    if (tab && tab.url) {
-      if (!tabActivityData[tabId]) {
-        initTabActivity(tabId);
-      }
-      tabActivityData[tabId].url = tab.url;
-    }
   });
 });
 
-// Listen for tab updates
-chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
-  if (tab.active && changeInfo.status === "complete") {
-    if (tabActivityData[tabId]) {
-      tabActivityData[tabId].url = tab.url;
-    }
-    handleUserInteraction(tabId);
-  }
-});
+// Optional: Save data periodically to chrome.storage
+function saveDataToStorage() {
+  chrome.storage.local.set({
+    tabData: tabData,
+  });
+}
 
-// Track window focus changes
-chrome.windows.onFocusChanged.addListener((windowId) => {
-  if (windowId === chrome.windows.WINDOW_ID_NONE) {
-    if (activeTabId) {
-      updateTabActivity(activeTabId, false);
-    }
-  } else {
-    chrome.tabs.query({ active: true, windowId }, (tabs) => {
-      if (tabs[0]) {
-        activeTabId = tabs[0].id;
-        handleUserInteraction(activeTabId);
-      }
-    });
-  }
-});
+// Save data every minute
+setInterval(saveDataToStorage, 60000);
 
-// Listen for messages
-chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  if (message.action === "getTabActivity") {
-    // Get current tabs and send response
+// Load saved data on extension initialization
+chrome.storage.local.get(["tabData"], (result) => {
+  if (result.tabData) {
+    tabData = result.tabData;
+    // Verify all current tabs
     chrome.tabs.query({}, (tabs) => {
-      const activityData = getFormattedActivityData(tabs);
-      sendResponse({ activityData });
+      tabs.forEach((tab) => {
+        if (!tabData[tab.id]) {
+          initializeTabData(tab.id, tab.url);
+        }
+      });
     });
-    return true; // Required for asynchronous response
   }
 });
-
-// Initialize connection tracking
-let connections = 0;
-chrome.runtime.onConnect.addListener((port) => {
-  connections++;
-  port.onDisconnect.addListener(() => {
-    connections--;
-  });
-});
-
-// chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-//   if (message.action === "getActiveTabs") {
-//     // Query all active tabs in all windows
-//     chrome.tabs.query({ active: true }, (tabs) => {
-//       // Send back the list of active tabs
-//       sendResponse({ activeTabs: tabs });
-//     });
-//     // Required to use sendResponse asynchronously
-//     return true;
-//   }
-// });
-
-// // background.js
-// let tabData = {};
-// let totalTimeSpent = 0;
-// let lastActiveTime = {};
-// let categories = {
-//   'youtube.com': 'Youtube',
-//   'google.com': 'Reading',
-//   'github.com': 'Coding',
-//   'fitbod.me': 'Exercise'
-//   // Add more mappings as needed
-// };
-
-// // Initialize storage with default values
-// chrome.runtime.onInstalled.addListener(() => {
-//   chrome.storage.local.set({
-//     tabTimeData: {},
-//     totalTimeSpent: 0,
-//     categoryData: {
-//       Youtube: 0,
-//       Reading: 0,
-//       Coding: 0,
-//       Exercise: 0
-//     }
-//   });
-// });
-
-// // Helper function to get category from URL
-// function getCategoryFromUrl(url) {
-//   try {
-//     const hostname = new URL(url).hostname;
-//     for (let domain in categories) {
-//       if (hostname.includes(domain)) {
-//         return categories[domain];
-//       }
-//     }
-//     return 'Other';
-//   } catch (e) {
-//     return 'Other';
-//   }
-// }
-
-// function updateTimeSpent() {
-//   chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-//     if (tabs[0]) {
-//       const tabId = tabs[0].id;
-//       const currentTime = Date.now();
-
-//       if (lastActiveTime[tabId]) {
-//         const timeSpent = currentTime - lastActiveTime[tabId];
-//         const category = getCategoryFromUrl(tabs[0].url);
-
-//         chrome.storage.local.get(['categoryData'], (result) => {
-//           const categoryData = result.categoryData || {};
-//           categoryData[category] = (categoryData[category] || 0) + timeSpent;
-
-//           chrome.storage.local.set({ categoryData }, () => {
-//             chrome.runtime.sendMessage({
-//               type: 'timeUpdate',
-//               data: categoryData
-//             });
-//           });
-//         });
-
-//         // Update total time
-//         totalTimeSpent += timeSpent;
-//         chrome.storage.local.set({ totalTimeSpent });
-//       }
-
-//       lastActiveTime[tabId] = currentTime;
-//     }
-//   });
-// }
-
-// // Track tab activation
-// chrome.tabs.onActivated.addListener((activeInfo) => {
-//   const tabId = activeInfo.tabId;
-//   lastActiveTime[tabId] = Date.now();
-// });
-
-// // Track tab updates
-// chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
-//   if (changeInfo.status === 'complete') {
-//     lastActiveTime[tabId] = Date.now();
-//   }
-// });
-
-// // Listen for messages from popup
-// chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-//   if (request.type === 'getTimeData') {
-//     chrome.storage.local.get(['categoryData', 'totalTimeSpent'], (result) => {
-//       sendResponse({
-//         categoryData: result.categoryData || {},
-//         totalTimeSpent: result.totalTimeSpent || 0
-//       });
-//     });
-//     return true; // Required for async response
-//   }
-// });

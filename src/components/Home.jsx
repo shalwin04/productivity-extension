@@ -9,68 +9,114 @@ const Home = () => {
     { message: "Hi! I'll help you track your browsing time.", align: "end" },
   ]);
   const [isLoading, setIsLoading] = useState(false);
-  const [radialData, setRadialData] = useState([]);
+  const [tabData, setTabData] = useState([]);
+  const [error, setError] = useState(null);
   const chatEndRef = useRef(null);
+  const portRef = useRef(null);
 
   useEffect(() => {
-    // Establish connection with service worker
-    const port = chrome.runtime.connect({ name: "popup" });
-    fetchActiveTabs();
-    // Listen for updates from service worker
-    port.onMessage.addListener((message) => {
-      if (message.action === "activityUpdate") {
-        const formattedData = message.data.map((tab) => ({
-          value: parseFloat(tab.totalActiveTime),
-          label: tab.name,
-        }));
-        setRadialData(formattedData);
-      }
-    });
+    // Scroll to bottom whenever messages change
+    chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [chatMessages]);
 
-    // Request initial data
-    port.postMessage({ action: "getTabActivity" });
+  useEffect(() => {
+    if (typeof chrome === "undefined" || !chrome.runtime) {
+      setError("Chrome extension API not available");
+      return;
+    }
 
-    // Clean up connection when component unmounts
-    return () => port.disconnect();
+    try {
+      // Establish connection with service worker
+      portRef.current = chrome.runtime.connect({ name: "popup" });
+
+      // Set up message listener
+      const messageListener = (message) => {
+        if (message.action === "tabsUpdate") {
+          const formattedData = formatTabData(message.data);
+          setTabData(formattedData);
+          setError(null);
+        }
+      };
+
+      portRef.current.onMessage.addListener(messageListener);
+
+      // Initial data fetch
+      fetchTabData();
+
+      // Set up periodic updates
+      const intervalId = setInterval(fetchTabData, 1000);
+
+      // Cleanup
+      return () => {
+        clearInterval(intervalId);
+        if (portRef.current) {
+          portRef.current.onMessage.removeListener(messageListener);
+          portRef.current.disconnect();
+        }
+      };
+    } catch (err) {
+      console.error("Error setting up connection:", err);
+      setError("Failed to connect to extension");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Rest of the component remains the same
-
-  const handleToggle = (e) => {
-    setMode(e.target.checked ? "Relax" : "Productivity");
+  const formatTabData = (data) => {
+    return data
+      .filter((tab) => tab.isOpen)
+      .map((tab) => ({
+        value: parseFloat(tab.totalTime),
+        label: tab.hostname || "Unknown",
+        fill: getRandomColor(),
+      }))
+      .sort((a, b) => b.value - a.value);
   };
 
-  const fetchActiveTabs = async () => {
+  const fetchTabData = async () => {
     setIsLoading(true);
     try {
-      if (typeof chrome !== "undefined" && chrome.runtime) {
-        chrome.runtime.sendMessage({ action: "getTabActivity" }, (response) => {
-          if (chrome.runtime.lastError) {
-            console.error("Chrome runtime error:", chrome.runtime.lastError);
-            setChatMessages((prev) => [
-              ...prev,
-              {
-                message:
-                  "Sorry, I couldn't fetch the tab times. Please try again.",
-                align: "end",
-              },
-            ]);
-          } else {
-            const activityData = response?.activityData || [];
-            // Convert the activity data to the format expected by RadialBar
-            const formattedData = activityData.map((tab) => ({
-              value: parseFloat(tab.totalActiveTime), // Convert string to number if needed
-              label: tab.name,
-            }));
-            setRadialData(formattedData);
-          }
-        });
-      }
+      chrome.runtime.sendMessage({ action: "getTabData" }, (response) => {
+        if (chrome.runtime.lastError) {
+          console.error("Chrome runtime error:", chrome.runtime.lastError);
+          setError("Failed to fetch tab data");
+          setChatMessages((prev) => [
+            ...prev,
+            {
+              message:
+                "Sorry, I couldn't fetch the tab times. Please try again.",
+              align: "end",
+            },
+          ]);
+        } else {
+          const formattedData = formatTabData(response?.tabData || []);
+          setTabData(formattedData);
+          setError(null);
+        }
+      });
     } catch (error) {
       console.error("Error fetching tabs:", error);
+      setError("Failed to fetch tab data");
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const getRandomColor = () => {
+    const colors = [
+      "#8884d8",
+      "#83a6ed",
+      "#8dd1e1",
+      "#82ca9d",
+      "#a4de6c",
+      "#d0ed57",
+      "#ffc658",
+      "#ff8042",
+    ];
+    return colors[Math.floor(Math.random() * colors.length)];
+  };
+
+  const handleToggle = (e) => {
+    setMode(e.target.checked ? "Relax" : "Productivity");
   };
 
   const handleSendMessage = (e) => {
@@ -82,16 +128,43 @@ const Home = () => {
       ]);
       e.target.value = "";
 
+      // Generate response based on current data
+      const response = generateResponse(userMessage, tabData, mode);
       setTimeout(() => {
         setChatMessages((prev) => [
           ...prev,
-          {
-            message: `You're in ${mode} mode. Here's your current browsing activity.`,
-            align: "end",
-          },
+          { message: response, align: "end" },
         ]);
       }, 500);
     }
+  };
+
+  const generateResponse = (message, data, currentMode) => {
+    const totalTime = data.reduce((sum, tab) => sum + tab.value, 0);
+    const mostUsedSite = data[0]?.label || "no sites";
+
+    if (message.toLowerCase().includes("time")) {
+      return `You've spent ${formatTime(
+        totalTime
+      )} browsing today, mostly on ${mostUsedSite}.`;
+    }
+    if (message.toLowerCase().includes("mode")) {
+      return `You're in ${currentMode} mode. This helps track your ${currentMode.toLowerCase()} time.`;
+    }
+    return `You're in ${currentMode} mode. Here's your current browsing activity.`;
+  };
+
+  const formatTime = (seconds) => {
+    const hours = Math.floor(seconds / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    const secs = Math.floor(seconds % 60);
+
+    const parts = [];
+    if (hours > 0) parts.push(`${hours}h`);
+    if (minutes > 0) parts.push(`${minutes}m`);
+    if (secs > 0 || parts.length === 0) parts.push(`${secs}s`);
+
+    return parts.join(" ");
   };
 
   return (
@@ -114,8 +187,31 @@ const Home = () => {
         />
       </div>
 
-      {/* Radial Progress Bars */}
-      <RadialBar data={radialData} />
+      {/* Error Message */}
+      {error && (
+        <div className="w-full max-w-md mx-auto p-4 mb-4 bg-red-100 text-red-700 rounded-lg">
+          {error}
+        </div>
+      )}
+
+      {/* Radial Chart */}
+      <div className="w-full max-w-xl p-4">
+        <RadialBar
+          width={400}
+          height={300}
+          cx={200}
+          cy={150}
+          innerRadius={20}
+          outerRadius={140}
+          barSize={20}
+          data={tabData}
+          label={{
+            position: "insideStart",
+            fill: "#fff",
+            formatter: (entry) => `${entry.label}`,
+          }}
+        />
+      </div>
 
       {/* Chat Interface */}
       <div className="relative bottom-0 left-0 w-full bg-white flex flex-col h-1/3 mt-auto">
